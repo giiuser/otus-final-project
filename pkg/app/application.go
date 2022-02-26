@@ -47,7 +47,7 @@ func (p *App) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 
 	content, err := json.Marshal(dummyResponse)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatuspkgServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 
 		return
 	}

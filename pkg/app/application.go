@@ -1,111 +1,97 @@
 package app
 
 import (
-	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"path"
-	"strconv"
 
-	cropper "github.com/JokeTrue/image-previewer/pkg/transformer"
-
-	"github.com/hashicorp/golang-lru/simplelru"
-
-	"github.com/pkg/errors"
-
-	"github.com/JokeTrue/image-previewer/pkg/fetcher"
-	"github.com/JokeTrue/image-previewer/pkg/logging"
-	"github.com/JokeTrue/image-previewer/pkg/utils"
+	"github.com/giiuser/otus-final-project/pkg/config"
+	"github.com/giiuser/otus-final-project/pkg/fetcher"
+	"github.com/giiuser/otus-final-project/pkg/resizer"
+	"github.com/giiuser/otus-final-project/pkg/transport"
+	"github.com/giiuser/otus-final-project/pkg/utils"
+	"github.com/rs/zerolog/log"
 )
 
-type Application struct {
-	cacheDir string
-	logger   logging.Logger
-	fetcher  fetcher.Fetcher
-	cropper  cropper.Transformer
-	cache    simplelru.LRUCache
+var (
+	ErrImageFetch         = errors.New("fetching image error")
+	ErrImageResize        = errors.New("resizing image error")
+	ErrInvalidURI         = errors.New("invalid URI")
+	ErrImageCopyFromCache = errors.New("error copying image from cache")
+)
+
+type App struct {
+	config    *config.Config
+	resizer   *resizer.Resizer
+	transport *transport.Transport
 }
 
-func NewApplication(cacheDir string, l logging.Logger, f fetcher.Fetcher, t cropper.Transformer, c simplelru.LRUCache) *Application {
-	return &Application{cacheDir: cacheDir, logger: l, fetcher: f, cropper: t, cache: c}
+type DummyResponse struct {
+	OK bool
 }
 
-func (a *Application) Run() http.Handler {
-	r := http.NewServeMux()
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		params := r.URL.Query()
-		url := params.Get("url")
-		rawWidth, rawHeight := params.Get("width"), params.Get("height")
+func New(config *config.Config, client *http.Client) (*App, error) {
+	rsz, err := resizer.New(config)
+	transport := transport.New(fetcher.NewHTTPFetcher(client, config), rsz)
 
-		ctx := logging.ContextWithFields(r.Context(), logging.Fields{
-			"url":     url,
-			"width":   rawWidth,
-			"height":  rawHeight,
-			"headers": r.Header,
-		})
-		ctxLogger := logging.WithContext(ctx)
+	return &App{
+		config:    config,
+		resizer:   rsz,
+		transport: transport,
+	}, err
+}
 
-		width, err := strconv.Atoi(rawWidth)
-		if err != nil {
-			ctxLogger.WithError(err).Error("failed to parse width")
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		height, err := strconv.Atoi(rawHeight)
-		if err != nil {
-			ctxLogger.WithError(err).Error("failed to parse height")
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
+func (p *App) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	dummyResponse := DummyResponse{true}
 
-		img, err := a.handle(ctx, url, r.Header, width, height)
+	content, err := json.Marshal(dummyResponse)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatuspkgServerError)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(content)
+}
+
+func (p *App) ResizeHandler(w http.ResponseWriter, r *http.Request) {
+	urlParams := utils.ParseURL("/" + r.URL.Path[1:])
+	log.Debug().Msgf("url params %+v", urlParams)
+	if urlParams.Error != nil {
+		log.Error().Msgf("%s: %+v", ErrInvalidURI, urlParams)
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "%s", ErrInvalidURI)
+
+		return
+	}
+	if !p.resizer.HasFile(urlParams) {
+		log.Debug().Msg("File was not found in cache, fetching the content...")
+		statusCode, content, err := p.transport.Receive(urlParams, r.Header)
 		if err != nil {
-			ctxLogger.WithError(err).Error("failed to handle request")
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			log.Error().Msgf("%s: %s", ErrImageFetch, err)
+			w.WriteHeader(statusCode)
+			fmt.Fprint(w, content)
+
 			return
 		}
+	}
 
-		w.Header().Add("Content-Type", "image/jpeg")
-		w.Header().Set("Content-Length", strconv.Itoa(len(img)))
-
-		if _, err := w.Write(img); err != nil {
-			ctxLogger.WithError(err).Error("failed to write response")
-		}
-	})
-	return r
+	err := p.transport.Send(urlParams, w)
+	if err != nil {
+		log.Error().Msgf("%s: %s", ErrImageCopyFromCache, err)
+		fmt.Fprintf(w, "%s", ErrImageCopyFromCache)
+	}
 }
 
-func (a *Application) handle(ctx context.Context, url string, header http.Header, width, height int) ([]byte, error) {
-	// 1. Try to find image in Cache
-	cacheKey, err := utils.GetHash(fmt.Sprintf("%s|%d|%d", url, width, height))
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cacheKey hash")
-	}
-	if imgPath, found := a.cache.Get(cacheKey); found {
-		img, err := ioutil.ReadFile(imgPath.(string))
-		return img, err
-	}
+func (p *App) Run(addr string) error {
+	mux := http.NewServeMux()
 
-	// 2. If not found in Cache, then try to fetch Image
-	img, err := a.fetcher.Fetch(ctx, url, header)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch image")
-	}
+	mux.HandleFunc("/health-check", p.HealthCheckHandler)
+	mux.HandleFunc("/fill/", p.ResizeHandler)
 
-	// 2. Transform Image
-	img, err = a.cropper.Crop(img, width, height)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to crop image")
-	}
+	log.Info().Msgf("Listening at %s", addr)
 
-	// 3. Save transformed Image
-	imgPath := path.Join(a.cacheDir, cacheKey+".jpeg")
-	err = ioutil.WriteFile(imgPath, img, 0600)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to save image")
-	}
-
-	// 4. Add Image path to Cache
-	a.cache.Add(cacheKey, imgPath)
-
-	return img, nil
+	return http.ListenAndServe(addr, mux)
 }

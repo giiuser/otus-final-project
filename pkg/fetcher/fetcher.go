@@ -2,98 +2,102 @@ package fetcher
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
-	"net/url"
-	"time"
+	"os"
 
-	"github.com/JokeTrue/image-previewer/pkg/utils"
-
-	"github.com/JokeTrue/image-previewer/pkg/logging"
-	"github.com/pkg/errors"
+	"github.com/giiuser/otus-final-project/pkg/config"
+	"github.com/giiuser/otus-final-project/pkg/utils"
+	"github.com/rs/zerolog/log"
 )
 
-var (
-	ErrNotSupportedContentType = errors.New("got not supported content type")
-	ErrNotSupportedScheme      = errors.New("got not supported scheme")
-	SupportedContentTypes      = []string{"image/jpeg"}
-)
+var ErrResponseValidation = errors.New("unexpected status code >= 400")
 
 type Fetcher interface {
-	Fetch(ctx context.Context, url string, header http.Header) ([]byte, error)
+	Fetch(string, http.Header, io.Writer) (int, string, string, error)
 }
 
 type HTTPFetcher struct {
-	logger         logging.Logger
-	transport      http.RoundTripper
-	requestTimeout time.Duration
+	config *config.Config
+	client *http.Client
 }
 
-func NewFetcher(l logging.Logger, connectTimeout time.Duration, requestTimeout time.Duration) *HTTPFetcher {
-	return &HTTPFetcher{
-		logger:         l,
-		requestTimeout: requestTimeout,
-		transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: connectTimeout,
-			}).DialContext,
-		},
-	}
+func NewHTTPFetcher(client *http.Client, cfg *config.Config) *HTTPFetcher {
+	return &HTTPFetcher{client: client, config: cfg}
 }
 
-func (f HTTPFetcher) Fetch(ctx context.Context, url string, header http.Header) ([]byte, error) {
-	proxyRequest, err := prepareRequest(ctx, url, header)
+func processData(r io.Reader, w io.Writer) (mimeType string, err error) {
+	tmpFile, err := ioutil.TempFile("", "tmp")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to prepare request")
+		return
 	}
-	responseBody, err := f.doRequest(proxyRequest)
+	defer tmpFile.Close()
+	log.Debug().Msgf("tmp file created %s", tmpFile.Name())
 	if err != nil {
-		return nil, errors.Wrap(err, "error making request")
-	}
-	return responseBody, nil
-}
-
-func prepareRequest(ctx context.Context, rawURL string, header http.Header) (*http.Request, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create proxy request")
-	}
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse image url")
-	}
-	if parsedURL.Scheme != "http" {
-		return nil, ErrNotSupportedScheme
-	}
-	request.URL = parsedURL
-	request.Header = header
-	return request, nil
-}
-
-func (f *HTTPFetcher) doRequest(request *http.Request) ([]byte, error) {
-	client := http.Client{
-		Timeout:   f.requestTimeout,
-		Transport: f.transport,
+		return
 	}
 
-	resp, err := client.Do(request)
+	_, err = io.Copy(tmpFile, r)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to perform request")
+		return
 	}
-	defer func() {
-		if errClose := resp.Body.Close(); errClose != nil {
-			f.logger.WithError(errClose).Error("failed to close body")
+	log.Debug().Msg("Content was copied to tmp file")
+	_, err = tmpFile.Seek(0, 0)
+	if err != nil {
+		return
+	}
+	mimeType, err = utils.GetFileMimeType(tmpFile)
+	go func() {
+		f, err := os.OpenFile(tmpFile.Name(), os.O_RDONLY, os.ModeAppend)
+		log.Debug().Msgf("Starting writing from tmpFile %s to writer, err: %s", tmpFile.Name(), err)
+		if err != nil {
+			return
 		}
+		defer os.Remove(tmpFile.Name())
+		_, err = io.Copy(w, f)
+		// To handle this error need to add additional channel?
+		if err != nil {
+			log.Debug().Msgf("Err during copying the file %s", err)
+
+			return
+		}
+		log.Debug().Msg("Content was copied from tmp file to writer")
 	}()
 
-	if !utils.Contains(SupportedContentTypes, resp.Header.Get("Content-type")) {
-		return nil, ErrNotSupportedContentType
+	return
+}
+
+func (f *HTTPFetcher) Fetch(url string, header http.Header, w io.Writer) (statusCode int, content string, mimeType string, err error) {
+	statusCode = 502
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+url, nil)
+	if err != nil {
+		return
+	}
+	req.Header = header
+	resp, err := f.client.Do(req)
+	if err != nil {
+		content = fmt.Sprintf("%s", err)
+
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Debug().Msgf("Getting external server response %s", resp.Status)
+	if resp.StatusCode >= 400 {
+		return resp.StatusCode, resp.Status, "", ErrResponseValidation
 	}
 
-	buff, err := ioutil.ReadAll(resp.Body)
+	log.Debug().Msgf("Processing data, maxFileSize: %d", f.config.MaxFileSize)
+	mimeType, err = processData(io.LimitReader(resp.Body, f.config.MaxFileSize), w)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read request body")
+		statusCode = 500
+
+		return
 	}
-	return buff, nil
+
+	return 200, "", mimeType, nil
 }

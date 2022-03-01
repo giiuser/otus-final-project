@@ -2,10 +2,10 @@ package logger
 
 import (
 	"errors"
-	"github.com/rs/zerolog"
 	"os"
 
 	"github.com/giiuser/otus-final-project/pkg/config"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 

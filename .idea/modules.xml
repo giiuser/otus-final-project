@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/otusFinalProject.iml" filepath="$PROJECT_DIR$/.idea/otusFinalProject.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/imagePreviewer.iml" filepath="$PROJECT_DIR$/.idea/imagePreviewer.iml" />
     </modules>
   </component>
 </project>

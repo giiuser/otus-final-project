@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/rs/zerolog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/giiuser/otus-final-project/pkg/config"
 	"github.com/giiuser/otus-final-project/pkg/utils"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
 

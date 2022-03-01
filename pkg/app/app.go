@@ -15,10 +15,10 @@ import (
 )
 
 var (
-	ErrImageFetch         = errors.New("fetching image error")
-	ErrImageResize        = errors.New("resizing image error")
-	ErrInvalidURI         = errors.New("invalid URI")
-	ErrImageCopyFromCache = errors.New("error copying image from cache")
+	ErrImageFetch         = errors.New("error during fetching the image")
+	ErrImageResize        = errors.New("error during resizing the image")
+	ErrInvalidURI         = errors.New("invalid URI. Expected format is: /<method>/<width>/<height>/<external url>")
+	ErrImageCopyFromCache = errors.New("error during copying the image from cache")
 )
 
 type App struct {

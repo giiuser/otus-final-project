@@ -60,7 +60,7 @@ func processData(r io.Reader, w io.Writer) (mimeType string, err error) {
 		_, err = io.Copy(w, f)
 		// To handle this error need to add additional channel?
 		if err != nil {
-			log.Debug().Msgf("Err during copying the file %s", err)
+			log.Debug().Msgf("Err during copying  the file %s", err)
 
 			return
 		}
@@ -86,12 +86,12 @@ func (f *HTTPFetcher) Fetch(url string, header http.Header, w io.Writer) (status
 	}
 	defer resp.Body.Close()
 
-	log.Debug().Msgf("Getting external server response %s", resp.Status)
+	log.Debug().Msgf("Getting the response from external server %s", resp.Status)
 	if resp.StatusCode >= 400 {
 		return resp.StatusCode, resp.Status, "", ErrResponseValidation
 	}
 
-	log.Debug().Msgf("Processing data, maxFileSize: %d", f.config.MaxFileSize)
+	log.Debug().Msgf("Processing the data, maxFileSize: %d", f.config.MaxFileSize)
 	mimeType, err = processData(io.LimitReader(resp.Body, f.config.MaxFileSize), w)
 	if err != nil {
 		statusCode = 500

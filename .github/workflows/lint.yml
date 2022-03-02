@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Linters
-          uses: golangci/golangci-lint-action@v2
-          with:
-            version: v1.37
-            working-directory:
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.37
+          working-directory:

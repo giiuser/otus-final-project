@@ -123,18 +123,6 @@ func TestFileNotFound(t *testing.T) {
 	})
 }
 
-func TestServerNotRespond(t *testing.T) {
-	t.Run("should process problem with server correctly", func(t *testing.T) {
-		resp, err := makeRequest("/fill/100/100/invalid_server/123.jpg")
-		require.NoError(t, err, "Error, while fetching the data")
-		defer resp.Body.Close()
-		data, _ := ioutil.ReadAll(resp.Body)
-		strData := string(data)
-		require.Containsf(t, strData, "no such host", "Error, while fetching the not existing file %s", strData)
-		require.Equalf(t, resp.StatusCode, 502, "incorrect status code %d", resp.StatusCode)
-	})
-}
-
 func TestInvalidURI(t *testing.T) {
 	t.Run("should process invalid uri correctly", func(t *testing.T) {
 		resp, err := makeRequest("/fill/width/height/nginx/123.jpg")

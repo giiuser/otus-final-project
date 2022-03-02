@@ -24,5 +24,5 @@ clean:
 	rm -r $(BINARY_DIR)
 build:
 	mkdir -p $(BINARY_DIR) && $(GOBUILD) -o $(BINARY_DIR) ./...
-	./$(BINARY_DIR)/$(BINARY_NAME)
 run: build
+	./$(BINARY_DIR)/$(BINARY_NAME)

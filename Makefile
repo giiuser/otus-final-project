@@ -22,6 +22,7 @@ lint:
 clean:
 	$(GOCLEAN)
 	rm -r $(BINARY_DIR)
-run:
+build:
 	mkdir -p $(BINARY_DIR) && $(GOBUILD) -o $(BINARY_DIR) ./...
 	./$(BINARY_DIR)/$(BINARY_NAME)
+run: build

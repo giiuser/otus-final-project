@@ -72,7 +72,7 @@ func TestResizeCacheHandler(t *testing.T) {
 	}))
 	defer externalServer.Close()
 
-	externalURL := fmt.Sprintf("%s/some/file/path.jpg", strings.Replace(externalServer.URL, "http://", "", -1))
+	externalURL := fmt.Sprintf("%s/some/file/path.jpg", strings.ReplaceAll(externalServer.URL, "http://", ""))
 
 	client := externalServer.Client()
 	app, mux := prepareHandlers(t, cfg, client)

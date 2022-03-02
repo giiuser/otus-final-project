@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/giiuser/otus-final-project/pkg/fetcher"
-	"github.com/giiuser/otus-final-project/pkg/resizer"
-	"github.com/giiuser/otus-final-project/pkg/utils"
+	"github.com/giiuser/otus-final-project/internal/fetcher"
+	"github.com/giiuser/otus-final-project/internal/resizer"
+	"github.com/giiuser/otus-final-project/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 

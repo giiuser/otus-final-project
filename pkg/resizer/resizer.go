@@ -9,9 +9,9 @@ import (
 	"os"
 
 	"github.com/disintegration/imaging"
-	"github.com/giiuser/otus-final-project/internal/cache"
-	"github.com/giiuser/otus-final-project/internal/config"
-	"github.com/giiuser/otus-final-project/internal/utils"
+	"github.com/giiuser/otus-final-project/pkg/cache"
+	"github.com/giiuser/otus-final-project/pkg/config"
+	"github.com/giiuser/otus-final-project/pkg/utils"
 	"github.com/rs/zerolog/log"
 )
 

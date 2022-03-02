@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/giiuser/otus-final-project/internal/app"
-	"github.com/giiuser/otus-final-project/internal/config"
-	"github.com/giiuser/otus-final-project/internal/logger"
+	"github.com/giiuser/otus-final-project/pkg/app"
+	"github.com/giiuser/otus-final-project/pkg/config"
+	"github.com/giiuser/otus-final-project/pkg/logger"
 	"github.com/rs/zerolog/log"
 )
 
